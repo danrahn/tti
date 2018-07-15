@@ -8,6 +8,7 @@ from PIL import Image
 
 
 from text_to_image.utilities import check_filename
+from text_to_image.utilities import color_to_index
 
 
 def decode(image_path):
@@ -16,16 +17,44 @@ def decode(image_path):
     :param str image_path: Path to a png image file.
     :return str: Decoded text.
     """
+    pixel_width = 8
     if not path.isfile(image_path):
         raise FileExistsError("Image file {0} does not exist. Cannot decode a nonexistent image".format(image_path))
     img = Image.open(image_path)
     decoded_text = ""
-    for row in range(0, img.size[0]):
-        for col in range(0, img.size[1]):
-            pixel_value = img.getpixel((row, col))
-            if pixel_value != 0:  # ignore 0 (NULL) values
-                decoded_text += chr(pixel_value)
-    return decoded_text
+    build_char = [0] * 3
+    index = 0
+    for row in range(0, img.size[0] // pixel_width):
+        for col in range(0, img.size[1] // pixel_width):
+            pixel_value = img.getpixel((row * pixel_width, col * pixel_width))
+            if pixel_value != (0, 0, 0):  # ignore 0 (NULL) values
+                build_char[index] = pixel_value
+                if index == 2:
+                    # Build up the integer by combining three colors
+                    decoded_text += decode_pixel(
+                        color_to_index[build_char[0]] |
+                        (color_to_index[build_char[1]] << 2) |
+                        (color_to_index[build_char[2]] << 4))
+                    index = 0
+                else:
+                    index += 1
+    return decoded_text + "=="
+
+
+def decode_pixel(pixel):
+    if pixel < 0 or pixel > 63:
+        raise ValueError("Number out of base64 range!")
+
+    if pixel < 26:
+        return chr(pixel + ord('A'))
+    if pixel < 52:
+        return chr(pixel - 26 + ord('a'))
+    if pixel < 62:
+        return chr(pixel - 52 + ord('0'))
+    if pixel == 62:
+        return '+'
+    if pixel == 63:
+        return '/'
 
 
 def decode_to_file(image_path, file_path):

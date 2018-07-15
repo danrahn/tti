@@ -8,7 +8,7 @@ from PIL import Image
 
 
 from text_to_image.utilities import check_filename
-from text_to_image.utilities import convert_char_to_int
+from text_to_image.utilities import convert_char_to_tuple
 from text_to_image.utilities import get_image_size
 
 
@@ -28,16 +28,26 @@ def encode(text, image_path, limit=256):
     if type(text) is not str:
         raise TypeError("Parameter 'text' must be a string.")
     text_length = len(text)
-    size = get_image_size(text_length)
+    size = get_image_size(text_length * 3) # Each character gets three pixels
     result_path = check_filename(image_path, extension=".png")
 
-    img = Image.new("L", size)  # grayscale, blank black image
+    # Start by getting all the possible pixels
+    colors = []
+    for i in range(text_length):
+        colors.extend(convert_char_to_tuple(text[i], limit=limit))
+
+    # Single-pixels are hard to decipher. Make them bigger
+    pixel_width = 8
+    img = Image.new("RGB", (size[0] * pixel_width, size[1] * pixel_width))  # grayscale, blank black image
     ind = 0
     for row in range(0, size[0]):
         for col in range(0, size[1]):
-            if ind < text_length:  # only change pixel value for length of text
-                pixel_value = convert_char_to_int(text[ind], limit=limit)
-                img.putpixel((row, col), pixel_value)
+            if ind < len(colors):  # only change pixel value for length of text
+                for i in range(pixel_width):
+                    for j in range(pixel_width):
+                        img.putpixel(
+                            (row * pixel_width + i, col * pixel_width + j),
+                            colors[ind])
                 ind += 1
             else:  # end of text, leave remaining pixel(s) black to indicate null
                 break
@@ -59,7 +69,7 @@ def encode_file(file_path, image_path, limit=256):
         raise FileExistsError("The file {0} does not exist. Cannot encode a non-existent text file.".format(file_path))
     if file_path[-4:].lower() != ".txt":
         raise TypeError("File {0} must be a plain text file with a '.txt' file extension".format(file_path))
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf8") as f:
         text = f.read()
 
     return encode(text, image_path, limit=limit)
